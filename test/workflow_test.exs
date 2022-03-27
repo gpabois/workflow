@@ -5,17 +5,19 @@ defmodule Workflow.Test do
 
   @repo_options Application.get_env(:workflow, Workflow.Test.Repo)
 
-  setup do
-    Repo.start_link(@repo_options)
+  setup_all do
+    start_supervised({Repo, @repo_options})
     Ecto.Migrator.run(Repo, [{0, Worfklow.Test.Migrations.AddTestTables}], :up, all: true)
-    Ecto.Adapters.SQL.Sandbox.checkout(Repo)
 
     on_exit fn ->
-      #Repo.start_link(@repo_options)
-      #Ecto.Migrator.run(Repo, [{0, Worfklow.Test.Migrations.AddTestTables}], :down, all: true)
-      #Repo.stop()
+      Ecto.Migrator.run(Repo, [{0, Worfklow.Test.Migrations.AddTestTables}], :down, all: true)
+      stop_supervised(Repo)
       :ok
     end
+  end
+
+  setup do
+    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
   end
 
 
