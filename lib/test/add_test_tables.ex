@@ -6,6 +6,11 @@ defmodule Worfklow.Test.Migrations.AddTestTables do
       add :name, :string
     end
 
+    create table "workflow_contexts" do
+      add :approved_by, references("users")
+      add :approved, :boolean
+    end
+
     Workflow.Migrations.change()
   end
 end

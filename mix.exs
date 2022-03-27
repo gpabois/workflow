@@ -26,7 +26,8 @@ defmodule Workflow.MixProject do
       {:phoenix, "~> 1.6.6"},
       {:ecto_sql, "~> 3.6"},
       {:postgrex, ">= 0.0.0"},
-      {:jason, "~> 1.1"}
+      {:jason, "~> 1.1"},
+      {:faker, "~> 0.17", only: :test}
     ]
   end
 

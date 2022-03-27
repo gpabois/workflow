@@ -2,16 +2,23 @@ defmodule Workflow.Test.Flow do
   @behaviour Workflow.Flow
 
   alias Workflow.Flow.Builder, as: B
+  alias Workflow.Test.Workflow.Context
 
   def get_flow() do
     B.begin()
-    |> B.start(:test_action)
+    |> B.start(:approve)
     |> B.user_action(:end,
-      :test_action,
+      :approve,
       fn _ -> "/test_view" end,
-      fn _ -> "user" end
+      fn _ -> &assign_approval/1 end
       )
     |> B.nend()
     |> B.build(__MODULE__)
   end
+
+  def assign_approval(task) do
+    %{approved_by_id: approved_by_id} = Context.get_by_process_id(task.process_id)
+    approved_by_id
+  end
+
 end
