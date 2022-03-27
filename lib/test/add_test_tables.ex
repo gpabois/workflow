@@ -11,6 +11,7 @@ defmodule Worfklow.Test.Migrations.AddTestTables do
       add :approved, :boolean
     end
 
+    Oban.Migrations.up()
     Workflow.Migrations.change()
   end
 end
