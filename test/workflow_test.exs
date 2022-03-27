@@ -7,6 +7,7 @@ defmodule Workflow.Test do
 
   setup_all do
     start_supervised({Repo, @repo_options})
+    start_supervised(Oban)
     Ecto.Migrator.up(Repo, 0, Worfklow.Test.Migrations.AddTestTables)
 
     on_exit fn ->
