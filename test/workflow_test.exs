@@ -7,11 +7,12 @@ defmodule Workflow.Test do
 
   setup_all do
     start_supervised({Repo, @repo_options})
-    Ecto.Migrator.run(Repo, [{0, Worfklow.Test.Migrations.AddTestTables}], :up, all: true)
+    Ecto.Migrator.up(Repo, 0, Worfklow.Test.Migrations.AddTestTables)
 
     on_exit fn ->
-      Ecto.Migrator.run(Repo, [{0, Worfklow.Test.Migrations.AddTestTables}], :down, all: true)
-      stop_supervised(Repo)
+      Repo.start_link(@repo_options)
+      Ecto.Migrator.down(Repo, 0, Worfklow.Test.Migrations.AddTestTables)
+      Repo.stop()
       :ok
     end
   end
