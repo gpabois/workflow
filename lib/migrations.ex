@@ -2,7 +2,8 @@ defmodule Workflow.Migrations do
   use Ecto.Migration
 
   def change() do
-    Oban.Migrations.up(prefix: "workflow")
+    Oban.Migrations.up()
+
     create table(:workflow_processes) do
       add :flow_type, :string, null: false
       add :status, :string, null: false
@@ -23,6 +24,6 @@ defmodule Workflow.Migrations do
   end
 
   def down do
-    Oban.Migrations.down(prefix: "workflow")
+    Oban.Migrations.down()
   end
 end

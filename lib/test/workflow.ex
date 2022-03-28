@@ -2,7 +2,7 @@ defmodule Workflow.Test.TestWorkflow do
   @behaviour Workflow.Flow
 
   alias Workflow.Flow.Builder, as: B
-  alias Workflow.Test.Workflow.Context
+  alias Workflow.Test.TestWorkflowContext
 
   def get_flow() do
     B.begin()
@@ -17,7 +17,7 @@ defmodule Workflow.Test.TestWorkflow do
   end
 
   def assign_approval(task) do
-    %{approved_by_id: approved_by_id} = Context.get_by_process_id(task.process_id)
+    %{approved_by_id: approved_by_id} = TestWorkflowContext.get_by_process_id(task.process_id)
     approved_by_id
   end
 

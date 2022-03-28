@@ -33,7 +33,7 @@ defmodule Workflow.MixProject do
 
   defp aliases do
     [
-     test: ["ecto.create", "test"]
+     test: ["ecto.create --quiet", "test"]
     ]
   end
 end

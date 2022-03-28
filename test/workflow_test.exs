@@ -12,7 +12,7 @@ defmodule Workflow.Test do
     Ecto.Migrator.up(Workflow.Repo, 0, Worfklow.Test.Migrations.AddTestTables)
 
     on_exit fn ->
-      Ecto.Migrator.down(Workflow.Repo, 0, Worfklow.Test.Migrations.AddTestTables)
+      #Ecto.Migrator.down(Workflow.Repo, 0, Worfklow.Test.Migrations.AddTestTables)
       :ok
     end
   end
@@ -27,11 +27,11 @@ defmodule Workflow.Test do
 
     user = Workflow.Test.User.fixture()
 
-    assert {:ok, process} = Workflow.create_if_ok TestWorkflow, 
-      fn process -> 
+    assert {:ok, process} = Workflow.create_if_ok TestWorkflow,
+      fn process ->
         {:ok, TestWorkflowContext.fixture(process_id: process.id, approved_by_id: user.id)}
       end
-    
+
       assert [task] = Workflow.Task.get_tasks_by_process_id(process.id)
       assert_enqueued worker: Workflow.Engine, args: %{id: task.id}
       assert %{success: 1, failure: 0} = Oban.drain_queue(queue: :workflow)
