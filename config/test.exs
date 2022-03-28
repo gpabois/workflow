@@ -1,6 +1,6 @@
 import Config
 
-config :workflow, Workflow.Test.Repo,
+config :workflow, Workflow.Repo,
   username: "postgres",
   password: "postgres",
   database: "workflow_test",
@@ -10,7 +10,7 @@ config :workflow, Workflow.Test.Repo,
 config :phoenix, :json_library, Jason
 
 config :workflow,
-  repo: Workflow.Test.Repo,
-  ecto_repos: [Workflow.Test.Repo],
+  repo: Workflow.Repo,
+  ecto_repos: [Workflow.Repo],
   user_model: Workflow.Test.User,
   user_table: :users

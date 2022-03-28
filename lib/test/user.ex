@@ -5,9 +5,8 @@ defmodule Workflow.Test.User do
     field :name, :string
   end
 
-
-  def user_fixture() do
-    {:ok, user} = %__MODULE__{name: Faker.Person.first_name()} |> Workflow.Test.Repo.insert()
+  def fixture() do
+    {:ok, user} = %__MODULE__{name: Faker.Person.first_name()} |> Workflow.Repo.insert()
     user
   end
 

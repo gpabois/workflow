@@ -6,12 +6,13 @@ defmodule Worfklow.Test.Migrations.AddTestTables do
       add :name, :string
     end
 
-    create table "workflow_contexts" do
-      add :approved_by, references("users")
-      add :approved, :boolean
-    end
-
     Oban.Migrations.up()
     Workflow.Migrations.change()
+   
+    create table "workflow_contexts" do
+      add :process_id, references("workflow_processes")
+      add :approved_by_id, references("users")
+      add :approved, :boolean
+    end
   end
 end

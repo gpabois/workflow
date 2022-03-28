@@ -12,7 +12,7 @@ defmodule Workflow.Process do
     def creation_changeset(%__MODULE__{} = process, attrs) do
         process
         |> cast(attrs, [:flow_type, :created_at])
-        |> put_change(:created_at, NaiveDatetime.utc_now())
+        |> put_change(:created_at, NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second))
         |> validate_required([:flow_type, :created_at])
     end
 

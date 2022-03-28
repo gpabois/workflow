@@ -1,19 +1,20 @@
 defmodule Workflow.Engine do
-    use Oban.Worker, queue: :workflow
+    use Oban.Worker
 
-    @repo Application.fetch_env!(:workflow, :repo)
+    @repo Workflow.Repo
 
     alias Workflow.{Process, Task}
+    alias Phoenix.PubSub
 
     def create_workflow_if_ok(process_params, context_fn) do
         process_changeset = Process.creation_changeset %Process{}, process_params
 
         @repo.transaction fn ->
             with {:ok, process} <- @repo.insert(process_changeset),
-                 {:ok, _context} <- @repo.insert(context_fn.(process)),
-                 {:ok, _task}    <- create_task(%{process_id: process.id, flow_node_name: :start})
+                 {:ok, _context} <- context_fn.(process),
+                 {:ok, task}    <- create_task(%{process_id: process.id, flow_node_name: "start"})
             do
-                {:ok, process}
+                process
             else
                 {:error, error} -> error
             end
@@ -35,7 +36,7 @@ defmodule Workflow.Engine do
 
     defp schedule_task(%{id: id} = _task) do
         %{id: id}
-        |> Workflow.Engine.new(queue: :workflow)
+        |> Workflow.Engine.new()
         |> Oban.insert()
     end
 
@@ -44,7 +45,7 @@ defmodule Workflow.Engine do
         |> Map.put(:status, "created")
         |> Map.put(:started_at, NaiveDateTime.utc_now())
 
-        @repo.transaction(fn ->
+        @repo.transaction fn ->
             with {:ok, task} <- Task.creation_changeset(%Task{}, task_params) |> @repo.insert(),
                     {:ok, _} <- schedule_task(task)
             do
@@ -52,12 +53,17 @@ defmodule Workflow.Engine do
             else
                 {:error, error} -> error
             end
-        end)
+        end
     end
 
     defp close_task(task) do
-        Task.update_changeset(task, %{status: "finished", finished_at: NaiveDateTime.utc_now()})
-        |> @repo.update()
+        with {ok, task} <- Task.update_changeset(task, %{status: "finished", finished_at: NaiveDateTime.utc_now()}) |> @repo.update()
+        do
+            PubSub.broadcast :workflow, "task", {:finished, task.id}
+        else
+            {:error, error} -> 
+                PubSub.broadcast :workflow, "task", {:error, task.id, error}
+        end
     end
 
     defp close_process(process) do

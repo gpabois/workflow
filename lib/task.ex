@@ -3,7 +3,7 @@ defmodule Workflow.Task do
     import Ecto.Query
     import Ecto.Changeset
 
-    @repo Application.fetch_env!(:workflow, :repo)
+    @repo Workflow.Repo
 
     schema "workflow_tasks" do
         belongs_to :process, Workflow.Process
@@ -26,14 +26,14 @@ defmodule Workflow.Task do
         |> cast(attrs, [:status, :status_complement, :finished_at])
     end
 
-    def to_process() do
-        from(task in __MODULE__, where: task.status in ["created", "done"]) |> @repo.all
+    def get_tasks_by_process_id(process_id) do
+        from(t in __MODULE__, where: t.process_id == ^process_id) |> @repo.all()
     end
 
-    @spec get_flow_node(
-            atom
-            | %{:flow_node_name => any, :process_id => any, optional(any) => any}
-          ) :: any
+    def get_assigned_tasks(user_id) do
+        from(t in __MODULE__, where: t.assigned_to_id == ^user_id) |> @repo.all()
+    end
+
     def get_flow_node(task) do
         process = @repo.get(Workflow.Process, task.process_id)
         flow = Workflow.Flow.get_flow(process.flow_type)

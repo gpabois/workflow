@@ -7,12 +7,12 @@ defmodule Workflow.Flow.Builder do
 
     def start(flow, next) do
         flow
-        |> Map.put(:start, %Start{next: next})
+        |> Map.put("start", %Start{next: next})
     end
 
     def nend(flow) do
         flow
-        |> Map.put(:end, %End{})
+        |> Map.put("end", %End{})
     end
 
     def user_action(flow, id, view_url_fn, assign_user_fn, next) do

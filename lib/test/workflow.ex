@@ -1,4 +1,4 @@
-defmodule Workflow.Test.Flow do
+defmodule Workflow.Test.TestWorkflow do
   @behaviour Workflow.Flow
 
   alias Workflow.Flow.Builder, as: B
@@ -6,9 +6,9 @@ defmodule Workflow.Test.Flow do
 
   def get_flow() do
     B.begin()
-    |> B.start(:approve)
+    |> B.start("approve")
     |> B.user_action(:end,
-      :approve,
+      "approve",
       fn _ -> "/test_view" end,
       fn _ -> &assign_approval/1 end
       )
