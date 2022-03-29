@@ -10,7 +10,9 @@ defmodule Workflow.Test do
     Ecto.Migrator.up(Workflow.Repo, 0, Worfklow.Test.Migrations.AddTestTables)
 
     on_exit fn ->
+      #Workflow.Repo.start_link()
       #Ecto.Migrator.down(Workflow.Repo, 0, Worfklow.Test.Migrations.AddTestTables)
+      #Workflow.Repo.stop()
       :ok
     end
   end
@@ -29,7 +31,7 @@ defmodule Workflow.Test do
       Workflow.register_flow B.begin("end") |> B.build("test")
 
       {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
-      fn _process ->
+      fn  ->
         {:ok, %{}}
       end,
       schedule: false
@@ -41,7 +43,7 @@ defmodule Workflow.Test do
       Workflow.register_flow B.begin("end") |> B.build("test")
 
       {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
-      fn _process ->
+      fn ->
         {:ok, %{}}
       end,
       schedule: false
@@ -62,7 +64,7 @@ defmodule Workflow.Test do
       ) |> B.build("test")
 
       {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
-      fn _process ->
+      fn ->
         {:ok, %{}}
       end,
       schedule: false
@@ -97,7 +99,7 @@ defmodule Workflow.Test do
       |> B.build("test")
 
       {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
-      fn _process ->
+      fn ->
         {:ok, %{}}
       end,
       schedule: false
@@ -118,13 +120,32 @@ defmodule Workflow.Test do
       |> B.build("test")
 
       {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
-      fn _process ->
+      fn ->
         {:ok, %{}}
       end,
       schedule: false
 
       assert {%{status: "finished"}, [cond_task], _} = assert_task_step(start_task)
       assert {%{status: "finished"}, [%{flow_node_name: "else"}], _} = assert_task_step(cond_task)
+    end
+
+    test "test flow node: job" do
+      Workflow.register_flow B.begin("job") 
+      |> B.job(
+          "job",
+          fn context -> {:ok, context |> Map.put(:flag, true)} end,
+          "end"
+      ) 
+      |> B.build("test")
+
+      {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
+      fn ->
+        {:ok, %{flag: false}}
+      end,
+      schedule: false
+
+      assert {%{status: "finished"}, [job_task], _} = assert_task_step(start_task)
+      assert {%{status: "finished"}, [end_task], %{context: %{flag: true}}} = assert_task_step(job_task)
     end
   end
 end

@@ -10,8 +10,8 @@ defmodule Workflow.Engine do
         process_changeset = Process.creation_changeset %Process{}, process_params
 
         @repo.transaction fn ->
-            with {:ok, process} <- @repo.insert(process_changeset),
-                 {:ok, _context} <- context_fn.(process),
+            with {:ok, context} <- context_fn.(),
+                 {:ok, process} <- @repo.insert(Process.creation_changeset %Process{}, process_params |> Map.put(:context, context)),
                  {:ok, task}    <- create_task(%{process_id: process.id, flow_node_name: "start"}, opts)
             do
                 {process, task}
@@ -22,8 +22,10 @@ defmodule Workflow.Engine do
     end
 
     def task_done_if_ok(task, context_change_fn, opts \\ []) do
+        process = @repo.get(Process, task.process_id)
         @repo.transaction fn ->
-            with {:ok, context}    <- context_change_fn.(task),
+            with {:ok, context} <- context_change_fn.(process.context),
+                 {:ok, process} <- Process.update_changeset(process, %{context: context}) |> @repo.update(),
                  {:ok, task} <- Task.update_changeset(task, %{status: "done"}) |> @repo.update()
             do
                 if Keyword.get(opts, :schedule, true) do
@@ -147,13 +149,14 @@ defmodule Workflow.Engine do
                             end
 
                         %Workflow.Flow.Nodes.Job{work_fn: work_fn, next: next_node} ->
-                            case work_fn.(task) do
-                                _ -> 
-                                    with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                                        {:ok, task} <- close_task(task)
-                                    do
-                                        {task, [next_task], process}
-                                    end
+                            with {:ok, context} <- work_fn.(process.context),
+                                 {:ok, process} <- Process.update_changeset(process, %{context: context}) |> @repo.update(),
+                                 {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
+                                 {:ok, task} <- close_task(task) 
+                            do
+                                
+                                {task, [next_task], process}
+                                
                             end
                     end
                 else

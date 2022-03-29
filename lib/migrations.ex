@@ -2,14 +2,17 @@ defmodule Workflow.Migrations do
   use Ecto.Migration
 
   def change() do
-    Oban.Migrations.up()
+    #Oban.Migrations.up()
 
     create table(:workflow_processes) do
       add :flow_type, :string, null: false
       add :status, :string, null: false
       add :created_at, :naive_datetime
       add :finished_at, :naive_datetime
+      add :context, :map, default: %{}
     end
+
+    execute("CREATE INDEX workflow_processes_contexts ON workflow_processes USING GIN(context)")
 
     create table(:workflow_tasks) do
       add :assigned_to_id, references(Application.fetch_env!(:workflow, :user_table), on_delete: :delete_all)
