@@ -7,10 +7,10 @@ defmodule Workflow.Test.TestWorkflow do
   def get_flow() do
     B.begin()
     |> B.start("approve")
-    |> B.user_action(:end,
-      "approve",
+    |> B.user_action("approve",
       fn _ -> "/test_view" end,
-      fn _ -> &assign_approval/1 end
+      &assign_approval/1,
+      "end"
       )
     |> B.nend()
     |> B.build(__MODULE__)

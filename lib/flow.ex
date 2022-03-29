@@ -4,10 +4,10 @@ defmodule Workflow.Flow do
     defstruct flow_type: nil, nodes: %{}
 
     def get_flow(type) do
-        apply(type, :get_flow, [])
+        apply(type |> String.to_atom, :get_flow, [])
     end
 
     def get_flow_node(flow, node_name) do
-        flow[node_name]
+        flow.nodes[node_name]
     end
 end

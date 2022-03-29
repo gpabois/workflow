@@ -16,8 +16,8 @@ defmodule Workflow do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  def create_if_ok(flow_type, context_fn) do
-    Workflow.Engine.create_workflow_if_ok(%{flow_type: flow_type |> to_string}, context_fn)
+  def create_if_ok(flow_type, context_fn, opts \\ []) do
+    Workflow.Engine.create_workflow_if_ok(%{flow_type: flow_type |> to_string}, context_fn, opts)
   end
 
   def done_if_ok(task, context_change_fn) do

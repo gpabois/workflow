@@ -23,7 +23,7 @@ defmodule Workflow.Task do
 
     def update_changeset(%__MODULE__{} = task, attrs) do
         task
-        |> cast(attrs, [:status, :status_complement, :finished_at])
+        |> cast(attrs, [:status, :assigned_to_id, :status_complement, :finished_at])
     end
 
     def get_tasks_by_process_id(process_id) do

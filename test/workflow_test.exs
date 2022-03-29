@@ -3,8 +3,8 @@ defmodule Workflow.Test do
   use Oban.Testing, repo: Workflow.Repo
 
   alias Workflow.Test.{TestWorkflow, TestWorkflowContext}
+  alias Workflow.{Process, Task}
 
-  @repo_options Application.get_env(:workflow, Workflow.Test.Repo)
 
   setup_all do
     {:ok, _pid} = start_supervised(Workflow)
@@ -21,25 +21,23 @@ defmodule Workflow.Test do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Workflow.Repo)
   end
 
-
-  test "simple workflow" do
-    Phoenix.PubSub.subscribe :workflow, "task"
-
+  test "test nodes" do
     user = Workflow.Test.User.fixture()
 
-    assert {:ok, process} = Workflow.create_if_ok TestWorkflow,
+    {:ok, {process, start_task}} = Workflow.create_if_ok TestWorkflow,
       fn process ->
         {:ok, TestWorkflowContext.fixture(process_id: process.id, approved_by_id: user.id)}
-      end
-
-      assert [task] = Workflow.Task.get_tasks_by_process_id(process.id)
-      assert_enqueued worker: Workflow.Engine, args: %{id: task.id}
-      assert %{success: 1, failure: 0} = Oban.drain_queue(queue: :workflow)
-
-      task_id = task.id
-      assert_receive {:finished, task_id}, 3_000
-
-      assert [task] = Workflow.Task.get_assigned_tasks(user.id)
-
+      end,
+      return_task: true,
+      schedule: false
+      
+      assert %{flow_node_name: "start"} = start_task
+      
+      {:ok, {_task, [approve_task], _process}} = Workflow.Engine.step start_task, schedule: false
+      
+      assert %{flow_node_name: "approve"} = approve_task
+      # Should assign the user 
+      assert {:ok, {approve_task, [], _process}} = Workflow.Engine.step approve_task, schedule: false
+      assert approve_task.assigned_to_id == user.id
   end
 end
