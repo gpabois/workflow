@@ -17,6 +17,11 @@ defmodule Workflow.Test.TestWorkflowContext do
     |> validate_required([:process_id, :approved_by_id])
   end
 
+  def update_changeset(%__MODULE__{} = ctx, params) do
+    ctx
+    |> cast(params, [:approved])
+  end
+
   def get_by_process_id(process_id) do
     from(ctx in __MODULE__, where: ctx.process_id == ^process_id) |> Repo.one()
   end

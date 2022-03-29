@@ -20,7 +20,7 @@ defmodule Workflow do
     Workflow.Engine.create_workflow_if_ok(%{flow_type: flow_type |> to_string}, context_fn, opts)
   end
 
-  def done_if_ok(task, context_change_fn) do
-    Workflow.Engine.task_done_if_ok(task, context_change_fn)
+  def done_if_ok(task, context_change_fn, opts \\ []) do
+    Workflow.Engine.task_done_if_ok(task, context_change_fn, opts)
   end
 end

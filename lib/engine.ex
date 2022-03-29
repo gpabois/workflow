@@ -25,13 +25,18 @@ defmodule Workflow.Engine do
         end
     end
 
-    def task_done_if_ok(task, context_change_fn) do
+    def task_done_if_ok(task, context_change_fn, opts \\ []) do
         @repo.transaction fn ->
-            with {:ok, _}    <- context_change_fn.(),
-                 {:ok, task} <- Task.update_changeset(task, %{status: "done"}) |> @repo.update(),
-                 {:ok, _}    <- schedule_task(task)
+            with {:ok, context}    <- context_change_fn.(task),
+                 {:ok, task} <- Task.update_changeset(task, %{status: "done"}) |> @repo.update()
             do
-                task
+                if Keyword.get(opts, :schedule, true) do
+                    with {:ok, _} <- schedule_task(task) do
+                        task
+                    end
+                else
+                    {task, context}
+                end
             else
                 {:error, error} -> error
             end
@@ -99,57 +104,64 @@ defmodule Workflow.Engine do
         
         case flow_node do
             nil -> raise "Missing node #{flow_node_name} in workflow #{process.flow_type}"
-            %Workflow.Flow.Nodes.Start{next: next_node} ->  
-                with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                     {:ok, task} <- close_task(task) 
-                do
-                    {task, [next_task], process}
-                end
+            flow_node -> 
+                unless task.status in ["finished"] do
+                    case flow_node do
+                        %Workflow.Flow.Nodes.Start{next: next_node} ->  
+                            with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
+                                {:ok, task} <- close_task(task) 
+                            do
+                                {task, [next_task], process}
+                            end
 
-            %Workflow.Flow.Nodes.End{} ->
-                with {:ok, task} <- close_task(task),
-                     {:ok, process} <- close_process(process) 
-                do
+                        %Workflow.Flow.Nodes.End{} ->
+                            with {:ok, task} <- close_task(task),
+                                {:ok, process} <- close_process(process) 
+                            do
+                                {task, [], process}
+                            end
+
+                        %Workflow.Flow.Nodes.Condition{predicate: predicate?, if_node: if_node, else_node: else_node} ->
+                            next_node = if(predicate?.(task), do: if_node, else: else_node)
+
+                            with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
+                                {:ok, task} <- close_task(task)
+                            do
+                                {task, [next_task], process}
+                            end
+
+                        %Workflow.Flow.Nodes.UserAction{assign_user_fn: assign_user_fn, next: next_node} ->
+                            case task.status do
+                                "created" ->
+                                    with {:ok, task} <- Task.update_changeset(task, %{
+                                        assigned_to_id: assign_user_fn.(task),
+                                        status: "idling"
+                                    }) |> @repo.update() do
+                                        {task, [], process}
+                                    end
+                                "idling" ->
+                                    {task, [], process}
+                                "done" ->
+                                    with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
+                                        {:ok, task} <- close_task(task)
+                                    do
+                                        {task, [next_task], process}
+                                    end
+                                _ -> raise "Invalid state #{task.status}."
+                            end
+
+                        %Workflow.Flow.Nodes.Job{work_fn: work_fn, next: next_node} ->
+                            case work_fn.(task) do
+                                _ -> 
+                                    with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
+                                        {:ok, task} <- close_task(task)
+                                    do
+                                        {task, [next_task], process}
+                                    end
+                            end
+                    end
+                else
                     {task, [], process}
-                end
-
-            %Workflow.Flow.Nodes.Condition{predicate: predicate?, if_node: if_node, else_node: else_node} ->
-                next_node = if(predicate?.(task), do: if_node, else: else_node)
-
-                with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                     {:ok, task} <- close_task(task)
-                do
-                    {task, [next_task], process}
-                end
-
-            %Workflow.Flow.Nodes.UserAction{assign_user_fn: assign_user_fn, next: next_node} ->
-                case task.status do
-                    "created" ->
-                        with {:ok, task} <- Task.update_changeset(task, %{
-                            assigned_to_id: assign_user_fn.(task),
-                            status: "idling"
-                        }) |> @repo.update() do
-                            {task, [], process}
-                        end
-                    "idling" ->
-                        {task, [], process}
-                    "done" ->
-                        with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                            {:ok, task} <- close_task(task)
-                        do
-                            {task, [next_task], process}
-                        end
-                    _ -> raise "Invalid state #{task.status}."
-                end
-
-            %Workflow.Flow.Nodes.Job{work_fn: work_fn, next: next_node} ->
-                case work_fn.(task) do
-                    _ -> 
-                        with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                            {:ok, task} <- close_task(task)
-                        do
-                            {task, [next_task], process}
-                        end
                 end
         end
     end

@@ -36,8 +36,30 @@ defmodule Workflow.Test do
       {:ok, {_task, [approve_task], _process}} = Workflow.Engine.step start_task, schedule: false
       
       assert %{flow_node_name: "approve"} = approve_task
+      
       # Should assign the user 
       assert {:ok, {approve_task, [], _process}} = Workflow.Engine.step approve_task, schedule: false
       assert approve_task.assigned_to_id == user.id
+
+      # Should loop until called Workflow.done_if_ok
+      assert {:ok, {^approve_task, [], _process}} = Workflow.Engine.step approve_task, schedule: false
+
+      assert {:ok, {approve_task, context}} = Workflow.done_if_ok approve_task, fn task -> 
+        TestWorkflowContext.get_by_process_id(task.process_id) 
+        |> TestWorkflowContext.update_changeset(%{approved: true}) 
+        |> Workflow.Repo.update()
+      end, schedule: false
+
+      # Should close the user action task, once is done
+      assert {:ok, {approve_task, [check_approval], _process}} = Workflow.Engine.step approve_task, schedule: false
+      
+      # Should go for end path directly, as the predicated should be true (approved)
+      assert {:ok, {check_approval, [end_task], process}} = Workflow.Engine.step check_approval, schedule: false
+      
+      # Should close the process, and the task
+      assert {:ok, {end_task, [], process}} = Workflow.Engine.step end_task, schedule: false
+
+      assert end_task.status == "finished"
+      assert process.status == "finished"
   end
 end
