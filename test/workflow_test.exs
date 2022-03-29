@@ -2,9 +2,7 @@ defmodule Workflow.Test do
   use ExUnit.Case
   use Oban.Testing, repo: Workflow.Repo
 
-  alias Workflow.Test.{TestWorkflow, TestWorkflowContext}
-  alias Workflow.{Process, Task}
-
+  alias Workflow.Builder, as: B
 
   setup_all do
     {:ok, _pid} = start_supervised(Workflow)
@@ -21,45 +19,112 @@ defmodule Workflow.Test do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Workflow.Repo)
   end
 
-  test "test nodes" do
-    user = Workflow.Test.User.fixture()
+  def assert_task_step(task) do
+    {:ok, result} = Workflow.Engine.step task, schedule: false
+    result
+  end
 
-    {:ok, {process, start_task}} = Workflow.create_if_ok TestWorkflow,
-      fn process ->
-        {:ok, TestWorkflowContext.fixture(process_id: process.id, approved_by_id: user.id)}
+  describe "test workflow nodes" do
+    test "test flow node: start" do
+      Workflow.register_flow B.begin("end") |> B.build("test")
+
+      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
+      fn _process ->
+        {:ok, %{}}
       end,
-      return_task: true,
       schedule: false
-      
-      assert %{flow_node_name: "start"} = start_task
-      
-      {:ok, {_task, [approve_task], _process}} = Workflow.Engine.step start_task, schedule: false
-      
-      assert %{flow_node_name: "approve"} = approve_task
-      
-      # Should assign the user 
-      assert {:ok, {approve_task, [], _process}} = Workflow.Engine.step approve_task, schedule: false
-      assert approve_task.assigned_to_id == user.id
 
-      # Should loop until called Workflow.done_if_ok
-      assert {:ok, {^approve_task, [], _process}} = Workflow.Engine.step approve_task, schedule: false
+      assert {%{status: "finished"}, [%{flow_node_name: "end"}], _process} = assert_task_step(start_task)
+    end
 
-      assert {:ok, {approve_task, context}} = Workflow.done_if_ok approve_task, fn task -> 
-        TestWorkflowContext.get_by_process_id(task.process_id) 
-        |> TestWorkflowContext.update_changeset(%{approved: true}) 
-        |> Workflow.Repo.update()
-      end, schedule: false
+    test "test flow node: end" do
+      Workflow.register_flow B.begin("end") |> B.build("test")
 
-      # Should close the user action task, once is done
-      assert {:ok, {approve_task, [check_approval], _process}} = Workflow.Engine.step approve_task, schedule: false
+      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
+      fn _process ->
+        {:ok, %{}}
+      end,
+      schedule: false
+
+      assert {%{status: "finished"}, [end_task], _process}      = assert_task_step(start_task)
+      assert {%{status: "finished"}, [], %{status: "finished"}} = assert_task_step(end_task)
+    end
+
+    test "test flow node: user_action" do
+      user = Workflow.Test.User.fixture()
       
-      # Should go for end path directly, as the predicated should be true (approved)
-      assert {:ok, {check_approval, [end_task], process}} = Workflow.Engine.step check_approval, schedule: false
-      
-      # Should close the process, and the task
-      assert {:ok, {end_task, [], process}} = Workflow.Engine.step end_task, schedule: false
+      Workflow.register_flow B.begin("user_action") 
+      |> B.user_action(
+          "user_action",
+          fn _task -> "test_view" end,
+          fn _task -> user.id end,
+          "end"
+      ) |> B.build("test")
 
-      assert end_task.status == "finished"
-      assert process.status == "finished"
+      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
+      fn _process ->
+        {:ok, %{}}
+      end,
+      schedule: false
+
+      assert {%{status: "finished"}, [user_action_task], _} = assert_task_step(start_task)
+
+      # Should idling once it has been created
+      assert {%{status: "idling", assigned_to_id: user_id} = user_action_task, [], _} = assert_task_step(user_action_task)
+      
+      # Should have been correctly assigned to the user
+      assert user_id == user.id
+
+      # Should still idling if we step it
+      assert {%{status: "idling"} = user_action_task, [], _} = assert_task_step(user_action_task)
+
+      # We execute done_if_ok to trigger the user action's node state to done, so it can be processed
+      assert {:ok, %{status: "done"} = user_action_task} = Workflow.done_if_ok user_action_task, fn _ -> {:ok, %{}} end
+      
+      # Finish the task properly
+      assert {%{status: "finished"}, [%{flow_node_name: "end"}], _} = assert_task_step(user_action_task)
+    end
+
+    test "test flow node: condition when is true" do
+      Workflow.register_flow B.begin("condition") 
+      |> B.condition(
+          "condition",
+          fn _ -> true end,
+          "if",
+          "else"
+      ) |> B.job("if", fn _ -> :ok end, "end")
+      |> B.job("else", fn _ -> :ok end, "end")
+      |> B.build("test")
+
+      {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
+      fn _process ->
+        {:ok, %{}}
+      end,
+      schedule: false
+
+      assert {%{status: "finished"}, [cond_task], _} = assert_task_step(start_task)
+      assert {%{status: "finished"}, [%{flow_node_name: "if"}], _} = assert_task_step(cond_task)
+    end
+
+    test "test flow node: condition when is false" do
+      Workflow.register_flow B.begin("condition") 
+      |> B.condition(
+          "condition",
+          fn _ -> false end,
+          "if",
+          "else"
+      ) |> B.job("if", fn _ -> :ok end, "end")
+      |> B.job("else", fn _ -> :ok end, "end")
+      |> B.build("test")
+
+      {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
+      fn _process ->
+        {:ok, %{}}
+      end,
+      schedule: false
+
+      assert {%{status: "finished"}, [cond_task], _} = assert_task_step(start_task)
+      assert {%{status: "finished"}, [%{flow_node_name: "else"}], _} = assert_task_step(cond_task)
+    end
   end
 end

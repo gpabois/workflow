@@ -1,8 +1,9 @@
-defmodule Workflow.Flow.Builder do
+defmodule Workflow.Builder do
     alias Workflow.Flow.Nodes.{Start, UserAction, Job, Condition, End}
 
-    def begin() do
+    def begin(next) do
         %{}
+        |> start(next)
     end
 
     def start(flow, next) do
@@ -30,9 +31,11 @@ defmodule Workflow.Flow.Builder do
         |> Map.put(id, %Condition{predicate: predicate, if_node: if_node, else_node: else_node})
     end
 
-    def build(nodes, flow_type) do
+    def build(nodes, name) do
+        nodes = nodes |> nend()
+
         %Workflow.Flow{
-            flow_type: flow_type,
+            name: name,
             nodes: nodes
         }
     end

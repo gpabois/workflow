@@ -14,11 +14,7 @@ defmodule Workflow.Engine do
                  {:ok, _context} <- context_fn.(process),
                  {:ok, task}    <- create_task(%{process_id: process.id, flow_node_name: "start"}, opts)
             do
-                if Keyword.get(opts, :return_task, false) do
-                    {process, task}
-                else
-                    process
-                end
+                {process, task}
             else
                 {:error, error} -> error
             end
