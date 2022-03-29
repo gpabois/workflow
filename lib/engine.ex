@@ -120,7 +120,7 @@ defmodule Workflow.Engine do
                             end
 
                         %Workflow.Flow.Nodes.Condition{predicate: predicate?, if_node: if_node, else_node: else_node} ->
-                            next_node = if(predicate?.(task), do: if_node, else: else_node)
+                            next_node = if(predicate?.(process.context), do: if_node, else: else_node)
 
                             with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
                                 {:ok, task} <- close_task(task)

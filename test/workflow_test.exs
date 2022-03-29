@@ -8,7 +8,7 @@ defmodule Workflow.Test do
     {:ok, _pid} = start_supervised(Workflow)
 
     Ecto.Migrator.up(Workflow.Repo, 0, Worfklow.Test.Migrations.AddTestTables)
-
+    Oban.Telemetry.attach_default_logger()
     on_exit fn ->
       #Workflow.Repo.start_link()
       #Ecto.Migrator.down(Workflow.Repo, 0, Worfklow.Test.Migrations.AddTestTables)
@@ -147,5 +147,23 @@ defmodule Workflow.Test do
       assert {%{status: "finished"}, [job_task], _} = assert_task_step(start_task)
       assert {%{status: "finished"}, [end_task], %{context: %{flag: true}}} = assert_task_step(job_task)
     end
+  end
+
+  test "integration w/ oban" do
+    Workflow.register_flow B.begin("condition") 
+    |> B.condition(
+        "condition",
+        fn %{"flag" => flag} -> flag end,
+        "if",
+        "else"
+    ) |> B.job("if", fn context -> {:ok, context} end, "end")
+    |> B.job("else", fn context -> {:ok, context} end, "end")
+    |> B.build("test")
+
+    {:ok, {_process, %{id: task_id} = _start_task}} = Workflow.create_if_ok "test", fn -> {:ok, %{flag: false}} end
+
+    assert_enqueued worker: Workflow.Engine, args: %{id: task_id}
+
+    assert %{success: 4} = Oban.drain_queue(queue: :default, with_recursion: true)
   end
 end
