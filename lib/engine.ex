@@ -132,7 +132,7 @@ defmodule Workflow.Engine do
                             case task.status do
                                 "created" ->
                                     with {:ok, task} <- Task.update_changeset(task, %{
-                                        assigned_to_id: assign_user_fn.(task),
+                                        assigned_to_id: assign_user_fn.(process.context),
                                         status: "idling"
                                     }) |> @repo.update() do
                                         {task, [], process}

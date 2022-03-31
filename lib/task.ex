@@ -40,4 +40,7 @@ defmodule Workflow.Task do
         Workflow.Flow.get_flow_node(flow, task.flow_node_name)
     end
 
+    def view_url(task) do
+        get_flow_node(task).view_url_fn.(task)
+    end
 end

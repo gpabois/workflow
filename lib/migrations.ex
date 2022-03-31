@@ -5,6 +5,7 @@ defmodule Workflow.Migrations do
     #Oban.Migrations.up()
 
     create table(:workflow_processes) do
+      add :created_by_id, references(Application.fetch_env!(:workflow, :user_table), on_delete: :delete_all)
       add :flow_type, :string, null: false
       add :status, :string, null: false
       add :created_at, :naive_datetime

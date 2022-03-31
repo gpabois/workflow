@@ -22,7 +22,8 @@ defmodule Workflow do
   end
 
   def create_if_ok(flow_type, context_fn, opts \\ []) do
-    Workflow.Engine.create_workflow_if_ok(%{flow_type: flow_type |> to_string}, context_fn, opts)
+    created_by = Keyword.get(opts, :created_by, nil)
+    Workflow.Engine.create_workflow_if_ok(%{flow_type: flow_type |> to_string, created_by_id: created_by}, context_fn, opts)
   end
 
   def done_if_ok(task, context_change_fn, opts \\ []) do
