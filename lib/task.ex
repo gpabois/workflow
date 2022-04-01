@@ -16,10 +16,13 @@ defmodule Workflow.Task do
     end
 
     def creation_changeset(%__MODULE__{} = task, attrs) do
+        attrs = attrs
+        |> Map.put(:started_at, NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second))
+        
         task
-        |> cast(attrs, [:process_id, :flow_node_name])
-        |> validate_required([:process_id, :flow_node_name])
-    end
+        |> cast(attrs, [:process_id, :started_at, :flow_node_name])
+        |> validate_required([:process_id, :started_at, :flow_node_name])
+       end
 
     def update_changeset(%__MODULE__{} = task, attrs) do
         task
@@ -27,7 +30,7 @@ defmodule Workflow.Task do
     end
 
     def get_tasks_by_process_id(process_id) do
-        from(t in __MODULE__, where: t.process_id == ^process_id) |> @repo.all()
+        from(t in __MODULE__, where: t.process_id == ^process_id, order_by: [desc: t.id]) |> @repo.all()
     end
 
     def get_assigned_tasks(user_id) do

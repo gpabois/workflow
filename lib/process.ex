@@ -12,14 +12,20 @@ defmodule Workflow.Process do
     end
 
     def creation_changeset(%__MODULE__{} = process, attrs) do
+        attrs = attrs
+        |> Map.put(:created_at, NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second))
+        
         process
         |> cast(attrs, [:flow_type, :created_at, :context, :created_by_id])
-        |> put_change(:created_at, NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second))
         |> validate_required([:flow_type, :created_at, :context])
     end
 
     def update_changeset(%__MODULE__{} = process, attrs) do
         process
         |> cast(attrs, [:status, :finished_at, :context])
+    end
+
+    def get(id) do
+        Workflow.Repo.get(__MODULE__, id)
     end
 end

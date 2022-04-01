@@ -80,9 +80,19 @@ defmodule Workflow.Engine do
         end
     end
 
+    defp failed_task(task) do
+        Task.update_changeset(task, %{status: "failed", finished_at: NaiveDateTime.utc_now()}) 
+        |> @repo.update()
+    end
+
     defp close_process(process) do
         Process.update_changeset(process, %{status: "finished", finished_at: NaiveDateTime.utc_now()})
         |> @repo.update()
+    end
+
+    defp failed_process(process) do
+        Process.update_changeset(process, %{status: "failed", finished_at: NaiveDateTime.utc_now()})
+        |> @repo.update()        
     end
 
     @impl Oban.Worker
@@ -101,9 +111,12 @@ defmodule Workflow.Engine do
         flow_node =  Workflow.Flow.get_flow_node(flow, flow_node_name)
         
         case flow_node do
-            nil -> raise "Missing node #{flow_node_name} in workflow #{process.flow_type}"
+            nil -> 
+                {:ok, task} = failed_task(task)
+                {:ok, process} = failed_process(process)
+                {task, [], process}
             flow_node -> 
-                unless task.status in ["finished"] do
+                unless task.status in ["finished", "failed"] do
                     case flow_node do
                         %Workflow.Flow.Nodes.Start{next: next_node} ->  
                             with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
@@ -154,9 +167,11 @@ defmodule Workflow.Engine do
                                  {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
                                  {:ok, task} <- close_task(task) 
                             do
-                                
                                 {task, [next_task], process}
-                                
+                            else
+                                {:error, _} -> 
+                                    {task |> failed_task, 
+                                    [], process |> failed_process}
                             end
                     end
                 else
