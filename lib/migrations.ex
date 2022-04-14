@@ -18,6 +18,7 @@ defmodule Workflow.Migrations do
     create table(:workflow_tasks) do
       add :assigned_to_id, references(Application.fetch_env!(:workflow, :user_table), on_delete: :delete_all)
       add :process_id, references(:workflow_processes, on_delete: :delete_all), null: false
+      add :parent_task_id, references(:workflow_tasks)
 
       add :flow_node_name, :string, null: false
       add :status, :string, null: false

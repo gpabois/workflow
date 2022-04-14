@@ -21,12 +21,21 @@ defmodule Workflow do
     Workflow.Registry.register(flow.name, flow)
   end
 
-  def create_if_ok(flow_type, context_fn, opts \\ []) do
+  def create(flow_type, context_params, opts \\ []) do
     created_by = Keyword.get(opts, :created_by, nil)
-    Workflow.Engine.create_workflow_if_ok(%{flow_type: flow_type |> to_string, created_by_id: created_by}, context_fn, opts)
+    Workflow.Engine.create_workflow(%{flow_type: flow_type |> to_string, created_by_id: created_by}, context_params, opts)
   end
 
-  def done_if_ok(task, context_change_fn, opts \\ []) do
+  def process_user_action(task, context_change_fn, opts \\ []) do
     Workflow.Engine.task_done_if_ok(task, context_change_fn, opts)
+  end
+  
+  def context_changeset(context, params, node) do
+    changeset = {context, node.types}
+    |> Ecto.Changeset.cast(params, node.fields)
+    
+    for validation <- node.validations do
+        validation.(changeset)
+    end
   end
 end

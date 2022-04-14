@@ -30,11 +30,7 @@ defmodule Workflow.Test do
     test "test flow node: start" do
       Workflow.register_flow B.begin("end") |> B.build("test")
 
-      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
-      fn  ->
-        {:ok, %{}}
-      end,
-      schedule: false
+      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create "test", %{}, schedule: false
 
       assert {%{status: "finished"}, [%{flow_node_name: "end"}], _process} = assert_task_step(start_task)
     end
@@ -42,11 +38,7 @@ defmodule Workflow.Test do
     test "test flow node: end" do
       Workflow.register_flow B.begin("end") |> B.build("test")
 
-      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
-      fn ->
-        {:ok, %{}}
-      end,
-      schedule: false
+      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create "test", %{}, schedule: false
 
       assert {%{status: "finished"}, [end_task], _process}      = assert_task_step(start_task)
       assert {%{status: "finished"}, [], %{status: "finished"}} = assert_task_step(end_task)
@@ -63,11 +55,7 @@ defmodule Workflow.Test do
           "end"
       ) |> B.build("test")
 
-      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create_if_ok "test",
-      fn ->
-        {:ok, %{}}
-      end,
-      schedule: false
+      {:ok, {_process, %{flow_node_name: "start"}  = start_task}} = Workflow.create "test", %{}, schedule: false
 
       assert {%{status: "finished"}, [user_action_task], _} = assert_task_step(start_task)
 
@@ -80,8 +68,8 @@ defmodule Workflow.Test do
       # Should still idling if we step it
       assert {%{status: "idling"} = user_action_task, [], _} = assert_task_step(user_action_task)
 
-      # We execute done_if_ok to trigger the user action's node state to done, so it can be processed
-      assert {:ok, %{status: "done"} = user_action_task} = Workflow.done_if_ok user_action_task, fn _ -> {:ok, %{}} end
+      # We execute process_user_action to trigger the user action's node state to done, so it can be processed
+      assert {:ok, %{status: "done"} = user_action_task} = Workflow.process_user_action user_action_task, %{} end
       
       # Finish the task properly
       assert {%{status: "finished"}, [%{flow_node_name: "end"}], _} = assert_task_step(user_action_task)
@@ -98,11 +86,7 @@ defmodule Workflow.Test do
       |> B.job("else", fn _ -> :ok end, "end")
       |> B.build("test")
 
-      {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
-      fn ->
-        {:ok, %{}}
-      end,
-      schedule: false
+      {:ok, {_process, start_task}} = Workflow.create "test", %{}, schedule: false
 
       assert {%{status: "finished"}, [cond_task], _} = assert_task_step(start_task)
       assert {%{status: "finished"}, [%{flow_node_name: "if"}], _} = assert_task_step(cond_task)
@@ -119,11 +103,7 @@ defmodule Workflow.Test do
       |> B.job("else", fn _ -> :ok end, "end")
       |> B.build("test")
 
-      {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
-      fn ->
-        {:ok, %{}}
-      end,
-      schedule: false
+      {:ok, {_process, start_task}} = Workflow.create "test", %{}, schedule: false
 
       assert {%{status: "finished"}, [cond_task], _} = assert_task_step(start_task)
       assert {%{status: "finished"}, [%{flow_node_name: "else"}], _} = assert_task_step(cond_task)
@@ -138,11 +118,7 @@ defmodule Workflow.Test do
       ) 
       |> B.build("test")
 
-      {:ok, {_process, start_task}} = Workflow.create_if_ok "test",
-      fn ->
-        {:ok, %{flag: false}}
-      end,
-      schedule: false
+      {:ok, {_process, start_task}} = Workflow.create "test", %{flag: false}, schedule: false
 
       assert {%{status: "finished"}, [job_task], _} = assert_task_step(start_task)
       assert {%{status: "finished"}, [end_task], %{context: %{flag: true}}} = assert_task_step(job_task)

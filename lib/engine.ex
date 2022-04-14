@@ -1,16 +1,39 @@
+defmodule Workflow.Reporter do
+    def notify_process_termination(process) do
+    end
+
+    def notify_task_termination(task) do
+    end
+end
+
 defmodule Workflow.Engine do
     use Oban.Worker
 
     @repo Workflow.Repo
 
-    alias Workflow.{Process, Task}
+    alias Workflow.{Reporter, Process, Task, Field}
     alias Phoenix.PubSub
 
-    def create_workflow_if_ok(process_params, context_fn, opts \\ []) do
+    def context_changeset(context, params, fields) do
+        types = Field.ecto_types(fields)
+
+        changeset = {context, types}
+        |> Ecto.Changeset.cast(params, Field.ecto_fields(fields))
+        |> Ecto.Changeset.validation_required(Field.ecto_required_fields(fields))
+        
+        for validation <- node.validations do
+            changeset = validation.(changeset)
+        end
+
+        changeset
+    end
+
+    def create_workflow(process_params, context_params, opts \\ []) do
         process_changeset = Process.creation_changeset %Process{}, process_params
 
         @repo.transaction fn ->
-            with {:ok, context} <- context_fn.(),
+            with {:ok, %{valid?: true} = changeset} <- context_changeset(process.context, context_params, node), 
+                 {:ok, context} <- Ecto.Changeset.apply_action(changeset, :insert),
                  {:ok, process} <- @repo.insert(Process.creation_changeset %Process{}, process_params |> Map.put(:context, context)),
                  {:ok, task}    <- create_task(%{process_id: process.id, flow_node_name: "start"}, opts)
             do
@@ -21,19 +44,22 @@ defmodule Workflow.Engine do
         end
     end
 
-    def task_done_if_ok(task, context_change_fn, opts \\ []) do
+    def process_user_action(task, context_params, opts \\ []) do
         process = @repo.get(Process, task.process_id)
+        node = Task.get_flow_node(task)
+
         @repo.transaction fn ->
-            with {:ok, context} <- context_change_fn.(process.context),
+            with {:ok, %{valid?: true} = changeset} <- context_changeset(process.context, context_params, node), 
+                 {:ok, context} <- Ecto.Changeset.apply_action(changeset, :update),
                  {:ok, process} <- Process.update_changeset(process, %{context: context}) |> @repo.update(),
                  {:ok, task} <- Task.update_changeset(task, %{status: "done"}) |> @repo.update()
             do
                 if Keyword.get(opts, :schedule, true) do
                     with {:ok, _} <- schedule_task(task) do
-                        task
+                        {task, process}
                     end
                 else
-                    {task, context}
+                    {task, process}
                 end
             else
                 {:error, error} -> error
@@ -68,31 +94,41 @@ defmodule Workflow.Engine do
         end
     end
 
-    defp close_task(task) do
-        with {:ok, task} <- Task.update_changeset(task, %{status: "finished", finished_at: NaiveDateTime.utc_now()}) |> @repo.update()
+    defp terminate_task(task, status, params \\ %{}) do
+        params = Map.merge(params, %{status: status, finished_at: NaiveDateTime.utc_now()})
+        with {:ok, task} <- Task.update_changeset(task, params) |> @repo.update()
         do
-            PubSub.broadcast :workflow, "task", {:finished, task.id}
-            {:ok, task}
-        else
-            {:error, error} -> 
-                PubSub.broadcast :workflow, "task", {:error, task.id, error}
-                {:error, error}
+            Reporter.notify_task_termination(task)
         end
     end
 
+    defp close_task(task) do
+        terminate_task(task, "finished")
+    end
+
     defp failed_task(task) do
-        Task.update_changeset(task, %{status: "failed", finished_at: NaiveDateTime.utc_now()}) 
-        |> @repo.update()
+        terminate_task(task, "failed")
     end
 
-    defp close_process(process) do
-        Process.update_changeset(process, %{status: "finished", finished_at: NaiveDateTime.utc_now()})
-        |> @repo.update()
+    @doc """
+        Terminate process
+    """
+    defp terminate_process(process, status \\ "finished") do
+        with {:ok, process} <- Process.update_changeset(process, %{status: status, finished_at: NaiveDateTime.utc_now()})
+        |> @repo.update() do
+            Reporter.notify_process_termination(process)
+        end
     end
 
+    def close_process(process) do
+        terminate_process(process, "finished")
+    end
+
+    @doc """
+        Declare process as failed
+    """
     defp failed_process(process) do
-        Process.update_changeset(process, %{status: "failed", finished_at: NaiveDateTime.utc_now()})
-        |> @repo.update()        
+        terminate_process(process, "failed")   
     end
 
     @impl Oban.Worker
@@ -103,12 +139,12 @@ defmodule Workflow.Engine do
     
     def step(task, opts \\ []) do
         process = @repo.get(Process, task.process_id)
-        @repo.transaction fn -> pstep(task, process, opts) end
+        @repo.transaction fn -> _step(task, process, opts) end
     end
 
-    defp pstep(%{flow_node_name: flow_node_name} = task, process, opts \\ []) do
-        flow =  Workflow.Flow.get_flow(process.flow_type)
-        flow_node =  Workflow.Flow.get_flow_node(flow, flow_node_name)
+    defp _step(%{flow_node_name: flow_node_name} = task, process, opts \\ []) do
+        flow = Workflow.Flow.get_flow(process.flow_type)
+        flow_node = Workflow.Flow.get_flow_node(flow, flow_node_name)
         
         case flow_node do
             nil -> 
@@ -119,24 +155,25 @@ defmodule Workflow.Engine do
                 unless task.status in ["finished", "failed"] do
                     case flow_node do
                         %Workflow.Flow.Nodes.Start{next: next_node} ->  
-                            with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                                {:ok, task} <- close_task(task) 
+                            task_params = %{process_id: process.id, flow_node_name: next_node, parent_task_id: task.id}
+                            with {:ok, next_task} <- create_task(, opts),
+                                {:ok, task} <- terminate_task(task) 
                             do
                                 {task, [next_task], process}
                             end
 
                         %Workflow.Flow.Nodes.End{} ->
-                            with {:ok, task} <- close_task(task),
-                                {:ok, process} <- close_process(process) 
+                            with {:ok, task}   <- terminate_task(task),
+                                {:ok, process} <- terminate_process(process) 
                             do
                                 {task, [], process}
                             end
 
                         %Workflow.Flow.Nodes.Condition{predicate: predicate?, if_node: if_node, else_node: else_node} ->
                             next_node = if(predicate?.(process.context), do: if_node, else: else_node)
-
-                            with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                                {:ok, task} <- close_task(task)
+                            task_params = %{process_id: process.id, flow_node_name: next_node, parent_task_id: task.id}
+                            with {:ok, next_task} <- create_task(task_params, opts),
+                                {:ok, task} <- terminate_task(task)
                             do
                                 {task, [next_task], process}
                             end
@@ -153,16 +190,18 @@ defmodule Workflow.Engine do
                                 "idling" ->
                                     {task, [], process}
                                 "done" ->
+                                    %{process_id: process.id, flow_node_name: next_node, parent_task_id: task.id}
                                     with {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
                                         {:ok, task} <- close_task(task)
                                     do
                                         {task, [next_task], process}
                                     end
-                                _ -> raise "Invalid state #{task.status}."
+                                _ -> 
+                                    {:ok, task} = failed_task(task)
                             end
 
-                        %Workflow.Flow.Nodes.Job{work_fn: work_fn, next: next_node} ->
-                            with {:ok, context} <- work_fn.(process.context),
+                        %Workflow.Flow.Nodes.Job{work: work, next: next_node} ->
+                            with {:ok, context} <- work.(process.context),
                                  {:ok, process} <- Process.update_changeset(process, %{context: context}) |> @repo.update(),
                                  {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
                                  {:ok, task} <- close_task(task) 

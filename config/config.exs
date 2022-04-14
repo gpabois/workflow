@@ -2,7 +2,7 @@ import Config
 
 config :workflow,
  ecto_repos: [Workflow.Repo],
- repo: Workflow.Repo,
+ repo: Workflow.Repo
 
 config :workflow, Oban,
   repo: Workflow.Repo,
