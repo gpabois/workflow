@@ -1,17 +1,21 @@
 defmodule Workflow.Builder do
     alias Workflow.Flow.Nodes.{Start, UserAction, Job, Condition, End}
 
-    def begin(next, opts) do
+    def begin(next, fields, next, opts) do
         %{}
-        |> start(next)
+        |> start(next, fields, next, opts)
     end
 
-    def start(flow, fields, next, opts \\ []) do
+    defp start(flow, fields, next, opts \\ []) do
         flow
-        |> Map.put("start", %Start{fields: fields, view: Keyword.get(opts, :view, nil), next: next})
+        |> Map.put("start", %Start{
+            fields: fields, 
+            view: Keyword.get(opts, :view, nil), 
+            next: next
+        })
     end
 
-    def nend(flow) do
+    defp nend(flow) do
         flow
         |> Map.put("end", %End{})
     end

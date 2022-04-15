@@ -1,5 +1,6 @@
 defmodule Workflow.Reporter do
     def notify_process_termination(process) do
+        
     end
 
     def notify_task_termination(task) do
@@ -29,7 +30,7 @@ defmodule Workflow.Engine do
     end
 
     def create_workflow(process_params, context_params, opts \\ []) do
-        process_changeset = Process.creation_changeset %Process{}, process_params
+        process_changeset = Process.creation_changeset(%Process{}, process_params)
 
         @repo.transaction fn ->
             with {:ok, %{valid?: true} = changeset} <- context_changeset(process.context, context_params, node), 
@@ -52,7 +53,7 @@ defmodule Workflow.Engine do
             with {:ok, %{valid?: true} = changeset} <- context_changeset(process.context, context_params, node), 
                  {:ok, context} <- Ecto.Changeset.apply_action(changeset, :update),
                  {:ok, process} <- Process.update_changeset(process, %{context: context}) |> @repo.update(),
-                 {:ok, task} <- Task.update_changeset(task, %{status: "done"}) |> @repo.update()
+                 {:ok, task} <- Task.update_changeset(task, status: "done") |> @repo.update()
             do
                 if Keyword.get(opts, :schedule, true) do
                     with {:ok, _} <- schedule_task(task) do

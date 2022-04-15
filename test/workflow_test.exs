@@ -47,11 +47,11 @@ defmodule Workflow.Test do
     test "test flow node: user_action" do
       user = Workflow.Test.User.fixture()
       
-      Workflow.register_flow B.begin("user_action") 
+      Workflow.register_flow B.begin([], "user_action") 
       |> B.user_action(
           "user_action",
-          fn _task -> "test_view" end,
-          fn _task -> user.id end,
+          [],
+          fn _context -> user.id end,
           "end"
       ) |> B.build("test")
 
@@ -76,7 +76,7 @@ defmodule Workflow.Test do
     end
 
     test "test flow node: condition when is true" do
-      Workflow.register_flow B.begin("condition") 
+      Workflow.register_flow B.begin([], "condition") 
       |> B.condition(
           "condition",
           fn _ -> true end,
@@ -136,7 +136,7 @@ defmodule Workflow.Test do
     |> B.job("else", fn context -> {:ok, context} end, "end")
     |> B.build("test")
 
-    {:ok, {_process, %{id: task_id} = _start_task}} = Workflow.create_if_ok "test", fn -> {:ok, %{flag: false}} end
+    {:ok, {_process, %{id: task_id} = _start_task}} = Workflow.create_if_ok("test", %{flag: false})
 
     assert_enqueued worker: Workflow.Engine, args: %{id: task_id}
 
