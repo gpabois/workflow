@@ -51,7 +51,7 @@ defmodule Workflow.Test do
       Workflow.register_flow B.begin([], "user_action") 
       |> B.user_action(
           "user_action",
-          [],
+          [Field.boolean(:flag, required: true)],
           fn _context -> user.id end,
           "end"
       ) |> B.build("test")
