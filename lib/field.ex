@@ -3,14 +3,14 @@ defmodule Workflow.Field do
 
     def ecto_types(fields) do
         fields
-        |> Enum.map(fields, fn field -> {field.id, field.type} end)
+        |> Enum.map(fn field -> {field.id, field.type} end)
         |> Map.new
     end
 
     def ecto_required_fields(fields) do
         fields
-        |> Enum.filter(fields, fn field -> field.required end)
-        |> Enum.map(fields, fn field -> field.id end)
+        |> Enum.filter(fn field -> field.required end)
+        |> Enum.map(fn field -> field.id end)
     end
 
     def ecto_fields(fields) do
@@ -30,7 +30,7 @@ defmodule Workflow.Field do
         }
     end
 
-    def boolean(id, opts) do
+    def boolean(id, opts \\ []) do
         %__MODULE__{
             type: :boolean,
             input_type: Keyword.get(opts, :input_type, :checkbox),
@@ -42,7 +42,7 @@ defmodule Workflow.Field do
         }
     end
 
-    def file(id, type, opts) do
+    def file(id, type, opts \\ []) do
         %__MODULE__{
             type:       type,
             input_type: :file,
@@ -67,7 +67,7 @@ defmodule Workflow.Field do
     end
 
     def values(field) do
-        if field.values <> nil do
+        if field.values != nil do
             field.values
         else
             field.values_fn.()

@@ -23,11 +23,15 @@ defmodule Workflow do
 
   def create(flow_type, context_params, opts \\ []) do
     created_by = Keyword.get(opts, :created_by, nil)
-    Workflow.Engine.create_workflow(%{flow_type: flow_type |> to_string, created_by_id: created_by}, context_params, opts)
+    Workflow.Engine.create_workflow(flow_type, %{flow_type: flow_type |> to_string, created_by_id: created_by}, context_params, opts)
   end
 
-  def process_user_action(task, context_change_fn, opts \\ []) do
-    Workflow.Engine.task_done_if_ok(task, context_change_fn, opts)
+  def step(task, opts \\ []) do
+    Workflow.Engine.step(task, opts)
+  end
+
+  def process_user_action(task, context_params, opts \\ []) do
+    Workflow.Engine.process_user_action(task, context_params, opts)
   end
   
   def context_changeset(context, params, node) do

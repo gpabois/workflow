@@ -1,11 +1,6 @@
 defmodule Workflow.Builder do
     alias Workflow.Flow.Nodes.{Start, UserAction, Job, Condition, End}
 
-    def begin(next, fields, next, opts) do
-        %{}
-        |> start(next, fields, next, opts)
-    end
-
     defp start(flow, fields, next, opts \\ []) do
         flow
         |> Map.put("start", %Start{
@@ -18,6 +13,11 @@ defmodule Workflow.Builder do
     defp nend(flow) do
         flow
         |> Map.put("end", %End{})
+    end
+
+    def begin(fields, next, opts \\ []) do
+        %{}
+        |> start(fields, next, opts)
     end
 
     def user_action(flow, id, fields, assign_user, next, opts \\ []) do
