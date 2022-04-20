@@ -1,5 +1,6 @@
 defmodule Workflow.Process do
     use Ecto.Schema
+    import Ecto.Query
     import Ecto.Changeset
 
     schema "workflow_processes" do
@@ -27,5 +28,9 @@ defmodule Workflow.Process do
 
     def get(id) do
         Workflow.Repo.get(__MODULE__, id)
+    end
+
+    def get_by_flow_type(flow_type) do
+        from(p in __MODULE__, where: p.flow_type == ^flow_type) |> Workflow.Repo.all()
     end
 end

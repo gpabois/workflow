@@ -5,6 +5,7 @@ defmodule Workflow.Builder do
         flow
         |> Map.put("start", %Start{
             fields: fields, 
+            validations: Keyword.get(opts, :validations, []),
             view: Keyword.get(opts, :view, nil), 
             next: next
         })
@@ -23,7 +24,8 @@ defmodule Workflow.Builder do
     def user_action(flow, id, fields, assign_user, next, opts \\ []) do
         flow
         |> Map.put(id, %UserAction {
-                fields: fields,
+                fields: fields, 
+                validations: Keyword.get(opts, :validations, []),
                 view: Keyword.get(opts, :view, nil),
                 assign_user: assign_user, 
                 next: next

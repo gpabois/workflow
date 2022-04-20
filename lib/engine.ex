@@ -22,7 +22,7 @@ defmodule Workflow.Engine do
         |> Ecto.Changeset.validate_required(Field.ecto_required_fields(fields))
         
         for validation <- validations, reduce: changeset do
-            changeset -> validation.(changeset)
+            changeset -> validation.(changeset, params)
         end
 
         changeset
@@ -33,7 +33,7 @@ defmodule Workflow.Engine do
         node = Flow.get_flow_node(flow, "start")
 
         @repo.transaction fn ->
-            changeset = context_changeset(%{}, context_params, node.fields, node.validations)
+            changeset = context_changeset(Field.data(node.fields), context_params, node.fields, node.validations)
 
             with {:ok, context} <- Ecto.Changeset.apply_action(changeset, :insert),
                  {:ok, process} <- @repo.insert(Process.creation_changeset %Process{}, process_params |> Map.put(:context, context)),

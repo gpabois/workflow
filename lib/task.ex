@@ -42,6 +42,10 @@ defmodule Workflow.Task do
         from(t in __MODULE__, where: t.assigned_to_id == ^user_id) |> @repo.all()
     end
 
+    def get(id) do
+        @repo.get(__MODULE__, id)
+    end
+
     def get_flow_node(task) do
         process = @repo.get(Workflow.Process, task.process_id)
         flow = Workflow.Flow.get_flow(process.flow_type)

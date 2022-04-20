@@ -34,12 +34,7 @@ defmodule Workflow do
     Workflow.Engine.process_user_action(task, context_params, opts)
   end
   
-  def context_changeset(context, params, node) do
-    changeset = {context, node.types}
-    |> Ecto.Changeset.cast(params, node.fields)
-    
-    for validation <- node.validations do
-        validation.(changeset)
-    end
+  def context_changeset(context, params, fields, validations) do
+    Workflow.Engine.context_changeset(context, params, fields, validations)
   end
 end
