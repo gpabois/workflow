@@ -31,6 +31,6 @@ defmodule Workflow.Process do
     end
 
     def get_by_flow_type(flow_type) do
-        from(p in __MODULE__, where: p.flow_type == ^flow_type) |> Workflow.Repo.all()
+        from(p in __MODULE__, where: p.flow_type == ^flow_type, preload: [:created_by]) |> Workflow.Repo.all()
     end
 end

@@ -32,11 +32,18 @@ defmodule Workflow.Engine do
         flow = Flow.get_flow(flow_type)
         node = Flow.get_flow_node(flow, "start")
 
+        process_params = process_params |> Map.put(:created_by_id, Keyword.get(opts, :created_by, nil))
+        
         @repo.transaction fn ->
             changeset = context_changeset(Field.data(node.fields), context_params, node.fields, node.validations)
 
             with {:ok, context} <- Ecto.Changeset.apply_action(changeset, :insert),
-                 {:ok, process} <- @repo.insert(Process.creation_changeset %Process{}, process_params |> Map.put(:context, context)),
+                 {:ok, process} <- @repo.insert(
+                    Process.creation_changeset(
+                        %Process{}, 
+                        process_params |> Map.put(:context, context)
+                    )
+                 ),
                  {:ok, task}    <- create_task(%{process_id: process.id, flow_node_name: "start"}, opts)
             do
                 {process, task}

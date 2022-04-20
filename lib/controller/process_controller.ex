@@ -28,7 +28,12 @@ defmodule Workflow.ProcessController do
                 flow = Flow.get_flow(flow_type)
                 node = Flow.get_flow_node(flow, "start")
                 
-                case Workflow.create(flow_type, initiate_params) do
+                created_by_id = case conn do
+                    %{assigns: %{current_user: current_user}} -> current_user.id
+                    _ -> nil
+                end
+
+                case Workflow.create(flow_type, initiate_params, created_by: created_by_id) do
                     {:ok, {process, task}} -> 
                         conn
                         |> redirect(to: unquote(redirect_fn).(conn, process))
