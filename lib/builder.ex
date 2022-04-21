@@ -1,5 +1,5 @@
 defmodule Workflow.Builder do
-    alias Workflow.Flow.Nodes.{Start, UserAction, Job, Condition, End}
+    alias Workflow.Flow.Nodes.{Start, UserAction, Job, Condition, Subprocess, End}
 
     defp start(flow, fields, next, opts \\ []) do
         flow
@@ -41,6 +41,11 @@ defmodule Workflow.Builder do
     def condition(flow, id, predicate, if_node, else_node) do
         flow
         |> Map.put(id, %Condition{predicate: predicate, if_node: if_node, else_node: else_node})
+    end
+
+    def subprocess(flow, id, init, result, next) do
+        flow
+        |> Map.put(id, %Subprocess{init: init, result: result, next: next})
     end
 
     def build(nodes, name) do

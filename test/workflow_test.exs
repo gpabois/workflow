@@ -70,7 +70,7 @@ defmodule Workflow.Test do
       assert {%{status: "idling"} = user_action_task, [], _} = assert_task_step(user_action_task)
 
       # We execute process_user_action to trigger the user action's node state to done, so it can be processed
-      assert {:ok, %{status: "done"} = user_action_task} = Workflow.process_user_action(user_action_task, %{})
+      assert {:ok, %{status: "done"} = user_action_task} = Workflow.process_user_action(user_action_task, %{flag: true})
       
       # Finish the task properly
       assert {%{status: "finished"}, [%{flow_node_name: "end"}], _} = assert_task_step(user_action_task)
@@ -124,23 +124,40 @@ defmodule Workflow.Test do
       assert {%{status: "finished"}, [job_task], _} = assert_task_step(start_task)
       assert {%{status: "finished"}, [end_task], %{context: %{flag: true}}} = assert_task_step(job_task)
     end
+    
+    test "test flow node: subprocess" do
+      Workflow.register_flow B.begin([], "bar") 
+      |> B.job("bar", &{:ok, &1}, "end") 
+      |> B.build("foo")
 
-  test "integration w/ oban" do
-    Workflow.register_flow B.begin([Field.boolean(:flag)], "condition") 
-    |> B.condition(
-        "condition",
-        fn %{"flag" => flag} -> flag end,
-        "if",
-        "else"
-    ) |> B.job("if", fn context -> {:ok, context} end, "end")
-    |> B.job("else", fn context -> {:ok, context} end, "end")
-    |> B.build("test")
+      Workflow.register_flow B.begin([], "sub")
+      |> B.subprocess(
+        "sub",
+        fn _context -> Workflow.create "foo", %{} end,
+        fn _subprocess, context -> {:ok, context} end,
+        "end"
+      ) |> B.build("test")
 
-    {:ok, {_process, %{id: task_id} = _start_task}} = Workflow.create("test", %{flag: false})
+      
 
-    assert_enqueued worker: Workflow.Engine, args: %{id: task_id}
+    end
+  
+    test "integration w/ oban" do
+      Workflow.register_flow B.begin([Field.boolean(:flag)], "condition") 
+      |> B.condition(
+          "condition",
+          fn %{"flag" => flag} -> flag end,
+          "if",
+          "else"
+      ) |> B.job("if", fn context -> {:ok, context} end, "end")
+      |> B.job("else", fn context -> {:ok, context} end, "end")
+      |> B.build("test")
 
-    assert %{success: 4} = Oban.drain_queue(queue: :default, with_recursion: true)
-  end
+      {:ok, {_process, %{id: task_id} = _start_task}} = Workflow.create("test", %{flag: false})
+
+      assert_enqueued worker: Workflow.Engine, args: %{id: task_id}
+
+      assert %{success: 4} = Oban.drain_queue(queue: :default, with_recursion: true)
+    end
   end
 end

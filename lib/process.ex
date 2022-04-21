@@ -30,6 +30,10 @@ defmodule Workflow.Process do
         Workflow.Repo.get(__MODULE__, id)
     end
 
+    def delete(id) do
+        from(p in __MODULE__, where: p.id == ^id) |> Workflow.Repo.delete_all()
+    end
+
     def get_by_flow_type(flow_type) do
         from(p in __MODULE__, where: p.flow_type == ^flow_type, preload: [:created_by]) |> Workflow.Repo.all()
     end
