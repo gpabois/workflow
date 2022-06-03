@@ -42,7 +42,7 @@ defmodule Workflow.Engine do
     end
 
     def process_user_action(task, context_params, opts \\ []) do
-        process = Repo.get(Process, task.process_id)
+        process = Process.get(task.process_id)
         node = Task.get_flow_node(task)
 
         Repo.transaction fn ->
@@ -128,12 +128,12 @@ defmodule Workflow.Engine do
 
     @impl Oban.Worker
     def perform(%Oban.Job{args: %{"id" => task_id}}) do
-        task = Repo.get(Task, task_id)
+        task = Repo.get!(Task, task_id)
         step(task)        
     end
     
     def step(task, opts \\ []) do
-        process = Repo.get(Process, task.process_id)
+        process = Process.get(task.process_id)
         Repo.transaction fn -> pstep(task, process, opts) end
     end
 
