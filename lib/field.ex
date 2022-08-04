@@ -1,5 +1,5 @@
 defmodule Workflow.Field do
-    defstruct id: nil, type: nil, input_type: nil, label: nil, values: nil, values_fn: nil, required: false, default: nil, internal: false
+    defstruct id: nil, type: nil, input_type: nil, label: nil, values: nil, values_fn: nil, required: false, default: nil, internal: false, validations: []
 
     def id(field) do
         field.id
@@ -48,7 +48,7 @@ defmodule Workflow.Field do
         %__MODULE__{
             type: type,
             input_type: :select,
-            id: id, 
+            id: id,
             label: Keyword.get(opts, :label, id),
             internal: Keyword.get(opts, :internal, false),
             default: Keyword.get(opts, :default, nil),
@@ -62,7 +62,7 @@ defmodule Workflow.Field do
         %__MODULE__{
             type: :boolean,
             input_type: Keyword.get(opts, :input_type, :checkbox),
-            id: id, 
+            id: id,
             internal: Keyword.get(opts, :internal, false),
             default: Keyword.get(opts, :default, nil),
             label: Keyword.get(opts, :label, id),
@@ -72,17 +72,17 @@ defmodule Workflow.Field do
         }
     end
 
-    def file(id, type, opts \\ []) do
+    def file(id, opts \\ []) do
         %__MODULE__{
-            type:       type,
             input_type: :file,
-            id:         id, 
-            internal: Keyword.get(opts, :internal, false),
-            default: Keyword.get(opts, :default, nil),
+            id:         id,
+            internal:   Keyword.get(opts, :internal, false),
+            default:    Keyword.get(opts, :default, nil),
             label:      Keyword.get(opts, :label, id),
             required:   Keyword.get(opts, :required, false),
             values:     Keyword.get(opts, :values, nil),
-            values_fn:  Keyword.get(opts, :values_fn, fn -> [] end)
+            values_fn:  Keyword.get(opts, :values_fn, fn -> [] end),
+            validations: [fn changeset, _ -> Workflow.File.cast_file(changeset, id, opts) end]
         }
     end
 
@@ -90,7 +90,7 @@ defmodule Workflow.Field do
         %__MODULE__{
             type: type,
             input_type: Keyword.get(opts, :input_type, :text),
-            id: id, 
+            id: id,
             internal: Keyword.get(opts, :internal, false),
             default: Keyword.get(opts, :default, nil),
             label: Keyword.get(opts, :label, id),

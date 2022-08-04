@@ -7,10 +7,12 @@ defmodule Workflow.Engine do
     def context_changeset(context, params, fields, validations) do
         types = Field.ecto_types(fields)
 
+        validations = validations ++ Enum.map(fields, fn f -> f.validations end) |> List.flatten
+
         changeset = {context, types}
         |> Ecto.Changeset.cast(params, Field.ecto_fields(fields))
         |> Ecto.Changeset.validate_required(Field.ecto_required_fields(fields))
-        
+
         for validation <- validations, reduce: changeset do
             changeset -> validation.(changeset, params)
         end
@@ -23,14 +25,14 @@ defmodule Workflow.Engine do
         node = Flow.get_flow_node(flow, "start")
 
         process_params = process_params |> Map.put(:created_by_id, Keyword.get(opts, :created_by, nil))
-        
+
         Repo.transaction fn ->
             changeset = context_changeset(Field.data(node.fields), context_params, node.fields, node.validations)
 
             with {:ok, context} <- Ecto.Changeset.apply_action(changeset, :insert),
                  {:ok, process} <- Repo.insert(
                     Process.creation_changeset(
-                        %Process{}, 
+                        %Process{},
                         process_params |> Map.put(:context, context)
                     )
                  ),
@@ -123,15 +125,15 @@ defmodule Workflow.Engine do
     end
 
     defp failed_process(process, reason \\ "") do
-        terminate_process(process, "failed", %{status_complement: reason})   
+        terminate_process(process, "failed", %{status_complement: reason})
     end
 
     @impl Oban.Worker
     def perform(%Oban.Job{args: %{"id" => task_id}}) do
         task = Repo.get!(Task, task_id)
-        step(task)        
+        step(task)
     end
-    
+
     def step(task, opts \\ []) do
         process = Process.get(task.process_id)
         Repo.transaction fn -> pstep(task, process, opts) end
@@ -140,42 +142,42 @@ defmodule Workflow.Engine do
     defp pstep(%{flow_node_name: flow_node_name} = task, process, opts \\ []) do
         flow        = Workflow.Flow.get_flow(process.flow_type)
         flow_node   = Workflow.Flow.get_flow_node(flow, flow_node_name)
-        
+
         case flow_node do
-            nil -> 
+            nil ->
                 {:ok, task}     = failed_task(task, "unknown flow node #{flow_node_name} for #{process.flow_type}")
                 {:ok, process}  = failed_process(process, "unknown flow node #{flow_node_name} for #{process.flow_type}")
                 {task, [], process}
-            flow_node -> 
+            flow_node ->
                 unless task.status in ["finished", "failed"] do
                     case flow_node do
-                        %Workflow.Flow.Nodes.Start{next: next_node} ->  
+                        %Workflow.Flow.Nodes.Start{next: next_node} ->
                             task_params = %{process_id: process.id, flow_node_name: next_node, parent_task_id: task.id}
                             with {:ok, next_task} <- create_task(task_params, opts),
-                                {:ok, task}       <- close_task(task) 
+                                {:ok, task}       <- close_task(task)
                             do
                                 {task, [next_task], process}
                             end
 
                         %Workflow.Flow.Nodes.End{} ->
                             with {:ok, task}   <- close_task(task),
-                                {:ok, process} <- close_process(process) 
+                                {:ok, process} <- close_process(process)
                             do
                                 {task, [], process}
                             end
-                        
+
                         %Workflow.Flow.Nodes.Subprocess{init: init_fn, result: result_fn, next: next_node} ->
-                            case task.status do 
-                                "created" -> 
+                            case task.status do
+                                "created" ->
                                     with {:ok, subprocess} <- init_fn.(process.context),
                                          {:ok, task} <- Repo.update Task.update_changeset(task, %{subprocess_id: subprocess.id, status: "idling"}) do
                                         {task, [subprocess], process}
                                     end
-                                "idling" -> 
+                                "idling" ->
                                     {task, [], process}
                                 "subprocess_terminated" ->
                                     task_params = %{process_id: process.id, flow_node_name: next_node, parent_task_id: task.id}
-                                    with {:ok, subprocess} <- Process.get(task.subprocess_id), 
+                                    with {:ok, subprocess} <- Process.get(task.subprocess_id),
                                             {:ok, context_params} <- result_fn.(subprocess, process.context),
                                             {:ok, next_task}      <- create_task(task_params, opts),
                                             {:ok, task}           <- close_task(task)
@@ -211,7 +213,7 @@ defmodule Workflow.Engine do
                                     do
                                         {task, [next_task], process}
                                     end
-                                _ -> 
+                                _ ->
                                     {:ok, task} = failed_task(task, "unknown state #{task.status} for user action")
                                     {task, [], process}
                             end
@@ -220,11 +222,11 @@ defmodule Workflow.Engine do
                             with {:ok, context} <- work.(process.context),
                                  {:ok, process} <- Process.update_changeset(process, %{context: context}) |> Repo.update(),
                                  {:ok, next_task} <- create_task(%{process_id: process.id, flow_node_name: next_node}, opts),
-                                 {:ok, task} <- close_task(task) 
+                                 {:ok, task} <- close_task(task)
                             do
                                 {task, [next_task], process}
                             else
-                                {:error, error} -> 
+                                {:error, error} ->
                                     {task |> failed_task(error), [], process |> failed_process(error)}
                             end
                         _ -> {task, [], process}
