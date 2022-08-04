@@ -15,7 +15,7 @@ defmodule Workflow.Process do
     def creation_changeset(%__MODULE__{} = process, attrs) do
         attrs = attrs
         |> Map.put(:created_at, NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second))
-        
+
         process
         |> cast(attrs, [:flow_type, :created_at, :context, :created_by_id])
         |> validate_required([:flow_type, :created_at, :context])
@@ -44,13 +44,22 @@ defmodule Workflow.Process do
         |> deserialize
     end
 
+    def get!(id) do
+        Workflow.Repo.get!(__MODULE__, id)
+        |> deserialize
+    end
+
     def delete(id) do
         from(p in __MODULE__, where: p.id == ^id) |> Workflow.Repo.delete_all()
     end
 
     def get_by_flow_type(flow_type) do
-        from(p in __MODULE__, where: p.flow_type == ^flow_type, preload: [:created_by]) 
+        from(p in __MODULE__, where: p.flow_type == ^flow_type, preload: [:created_by])
         |> Workflow.Repo.all()
         |> Enum.map(&deserialize/1)
+    end
+
+    def get_flow(process) do
+      Workflow.Flow.get_flow(process.flow_type)
     end
 end

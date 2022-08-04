@@ -1,18 +1,37 @@
 defmodule Workflow.File do
   defstruct [oid: nil, name: nil, content_type: nil]
-
   def from(data, attr_name) do
     %__MODULE__{
-      oid: data["#{attr_name}__oid"],
-      name: data["#{attr_name}__name"],
-      content_type: data["#{attr_name}__content_type"],
+      oid: data[attr_name][:oid],
+      name: data[attr_name][:name],
+      content_type: data[attr_name][:content_type],
     }
   end
 
   defp fp(file) do
     case file do
-      %__MODULE__{oid: oid} -> oid
+      %{oid: oid} -> oid
       oid -> oid
+    end
+  end
+
+  def store(%{filename: filename, content_type: content_type, data: data}) do
+    oid = :crypto.hash(:sha256, data)
+    |> Base.url_encode64
+
+    file_dir = Application.fetch_env!(:workflow, :file_dir)
+    filepath = Path.join(file_dir, fp(oid))
+    File.mkdir_p!(Path.dirname(filepath))
+
+    case File.write(filepath, data, [:write]) do
+      :ok ->
+        {:ok, %{
+          oid: oid,
+          name: filename,
+          content_type: content_type
+        }}
+      {:error, error}
+        -> {:error, error}
     end
   end
 
@@ -23,8 +42,9 @@ defmodule Workflow.File do
   end
 
   def cast_file(changeset, field, opts \\ []) do
-    optional = Keyword.get(opts, :optional, false)
-    case Ecto.Changeset.get_field(changeset, field) do
+    optional = not Keyword.get(opts, :required, false)
+
+    case Ecto.Changeset.get_change(changeset, field) do
       nil ->
         if optional do
           changeset
@@ -32,9 +52,9 @@ defmodule Workflow.File do
             Ecto.Changeset.add_error(changeset, field, "missing file")
         end
 
-        %Plug.Upload{} = upload ->
+      %Plug.Upload{} = upload ->
         content_type = upload.content_type
-        nom = upload.filename
+        name = upload.filename
         oid = File.stream!(upload.path, [], 2048)
         |> Enum.reduce(:crypto.hash_init(:sha256),fn(line, acc) -> :crypto.hash_update(acc, line) end )
         |> :crypto.hash_final
@@ -43,16 +63,19 @@ defmodule Workflow.File do
         # Copy the file
         file_dir = Application.fetch_env!(:workflow, :file_dir)
         filepath = Path.join(file_dir, fp(oid))
-
         File.mkdir_p!(Path.dirname(filepath))
+
         case File.cp(upload.path, filepath) do
           :ok ->
             changeset
-            |> Ecto.Changeset.put_change(:"#{field}__oid", oid)
-            |> Ecto.Changeset.put_change(:"#{field}__name", nom)
-            |> Ecto.Changeset.put_change(:"#{field}__content_type", content_type)
+            |> Ecto.Changeset.put_change(field, %{
+              oid: oid,
+              name: name,
+              content_type: content_type
+            })
           {:error, error} ->
-            Ecto.Changeset.add_error(changeset, field, error)
+            changeset
+            |> Ecto.Changeset.add_error(field, error)
         end
     end
   end

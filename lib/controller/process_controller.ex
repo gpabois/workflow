@@ -1,62 +1,118 @@
 defmodule Workflow.ProcessController do
 
     defmacro __using__(opts \\ []) do
-        redirect_fn = Keyword.fetch!(opts, :redirect)
         quote do
             alias Workflow.{Process, Task, Flow}
 
-            def show(conn, %{"process_id" => process_id}) do
+            def download(conn, %{"process_id" => process_id, "field" => field}) do
+                process = Process.get(process_id)
+                file = process.context[field |> String.to_existing_atom]
+                content = Workflow.File.read!(file)
+
+                conn
+                |> put_resp_header("content-disposition", ~s(filename="#{file.name}"))
+                |> put_resp_content_type(file.content_type)
+                |> Plug.Conn.send_resp(200, content)
+            end
+
+            def index(conn, %{"flow_type" => flow_type} = args) do
+                flow = Flow.get_flow(flow_type)
+                cond do
+                    flow.controller != nil ->
+                        {controller, actions} = case flow.controler do
+                            {controller, actions} -> {controller, actions}
+                            controller -> {controller, []}
+                        end
+
+                        apply(controller, Keyword.get(actions, :index, :index), [
+                            conn,
+                            args
+                        ])
+                    true -> raise "You have to set either view or controller for the Process"
+                end
+            end
+
+            def show(conn, %{"process_id" => process_id} = args) do
                 process = Process.get(process_id)
                 flow    = Flow.get_flow(process.flow_type)
-                node    = Flow.get_flow_node(flow, "start")   
-               
-                {view, action} = case node.view do
-                    {view, action} -> {view, action}
-                    _ -> {node.view, "show.html"}
+
+                cond do
+                    flow.controller != nil ->
+                        {controller, actions} = case flow.controller do
+                            {controller, actions} -> {controller, actions}
+                            controller -> {controller, []}
+                        end
+
+                        apply(controller, Keyword.get(actions, :show, :show), [
+                            conn,
+                            args
+                        ])
+
+                    true -> raise "You have to set either view or controller for the Process"
                 end
-                
-                conn
-                |> put_view(view)
-                |> render(action, process: process, tasks: Task.get_tasks_by_process_id(process.id), context: process.context)             
             end
 
-            def new(conn, %{"flow_type" => flow_type} = _params) do
+            def delete(conn, %{"process_id" => process_id} = args) do
+                process = Process.get(process_id)
+                flow    = Flow.get_flow(process.flow_type)
+
+                cond do
+                    flow.controller != nil ->
+                        {controller, actions} = case flow.controller do
+                            {controller, actions} -> {controller, actions}
+                            controller -> {controller, []}
+                        end
+
+                        apply(controller, Keyword.get(actions, :delete, :delete), [
+                            conn,
+                            args
+                        ])
+
+                    true -> raise "You have to set either view or controller for the Process"
+                end
+            end
+
+            def new(conn, %{"flow_type" => flow_type} = params) do
                 flow = Flow.get_flow(flow_type)
                 node = Flow.get_flow_node(flow, "start")
 
-                {view, action} = case node.view do
-                    {view, action} -> {view, action}
-                    _ -> {node.view, "new.html"}
-                end
+                cond do
+                    flow.controller != nil ->
+                        {controller, actions} = case flow.controller do
+                            {controller, actions} -> {controller, actions}
+                            controller -> {controller, []}
+                        end
 
-                conn
-                |> put_view(view)
-                |> render(action, flow: flow, changeset: Workflow.context_changeset(%{}, %{}, node.fields, node.validations), fields: node.fields)
+                        apply(controller, Keyword.get(actions, :new, :new), [
+                            conn,
+                            params
+                            |> Map.put("flow", flow)
+                            |> Map.put("node", node)
+                        ])
+
+                    true -> raise "You have to set either view or controller for the Process"
+                end
             end
 
-            def create(conn, %{"flow_type" => flow_type, "initiate" => initiate_params} = _args) do
+            def create(conn, %{"flow_type" => flow_type, "initiate" => initiate_params} = params) do
                 flow = Flow.get_flow(flow_type)
                 node = Flow.get_flow_node(flow, "start")
-                
-                created_by_id = case conn do
-                    %{assigns: %{current_user: current_user}} -> current_user.id
-                    _ -> nil
-                end
 
-                {view, action} = case node.view do
-                    {view, action} -> {view, action}
-                    _ -> {node.view, "new.html"}
-                end
+                cond do
+                    flow.controller != nil ->
+                        {controller, actions} = case flow.controller do
+                            {controller, actions} -> {controller, actions}
+                            controller -> {controller, []}
+                        end
 
-                case Workflow.create(flow_type, initiate_params, created_by: created_by_id) do
-                    {:ok, {process, task}} -> 
-                        conn
-                        |> redirect(to: unquote(redirect_fn).(conn, process))
+                        apply(controller, Keyword.get(actions, :create, :create), [
+                            conn,
+                            params
+                            |> Map.put("flow", flow)
+                            |> Map.put("node", node)
+                        ])
 
-                    {:error, changeset} ->
-                        conn
-                        |> put_view(view)
-                        |> render(action, changeset: changeset, fields: node.fields)                
+                    true -> raise "You have to set either view or controller for the Process"
                 end
             end
         end

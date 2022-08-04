@@ -4,6 +4,37 @@ defmodule Workflow.Engine do
     alias Workflow.Repo
     alias Workflow.{Flow, Reporter, Process, Task, Field}
 
+    def get_changeset(context, params, flow, %{fields: fields, validations: validations}, opts \\ []) do
+        sub_types = Enum.filter(Flow.types(flow), fn {k, _} -> k in fields end) |> Enum.into(%{})
+        required_sub_types = Enum.filter(Flow.required_types(flow), fn k -> k in fields end)
+
+        # Cast files if any
+        validations = Enum.map(sub_types, fn {id, type} ->
+            if type == :file do
+                [fn changeset, _ -> Workflow.File.cast_file(changeset, id, required: id in required_sub_types) end]
+            else
+                []
+            end
+        end) |> List.flatten
+
+        # Change :file to :map
+        sub_types = Enum.map(sub_types, fn {k, type} ->
+            if type == :file do
+                {k, :map}
+            else
+                {k, type}
+            end
+        end) |> Enum.into(%{})
+
+        changeset = {context, sub_types}
+        |> Ecto.Changeset.cast(params, Map.keys(sub_types))
+        |> Ecto.Changeset.validate_required(required_sub_types)
+
+        for validation <- validations, reduce: changeset do
+            changeset -> validation.(changeset, params)
+        end
+    end
+
     def context_changeset(context, params, fields, validations) do
         types = Field.ecto_types(fields)
 
@@ -16,8 +47,10 @@ defmodule Workflow.Engine do
         for validation <- validations, reduce: changeset do
             changeset -> validation.(changeset, params)
         end
+    end
 
-        changeset
+    def context_changeset(context, params, node) do
+        context_changeset(context, params, node.fields, node.validations)
     end
 
     def create_workflow(flow_type, process_params, context_params, opts \\ []) do
@@ -27,7 +60,7 @@ defmodule Workflow.Engine do
         process_params = process_params |> Map.put(:created_by_id, Keyword.get(opts, :created_by, nil))
 
         Repo.transaction fn ->
-            changeset = context_changeset(Field.data(node.fields), context_params, node.fields, node.validations)
+            changeset = get_changeset(Flow.data(flow), context_params, flow, node)
 
             with {:ok, context} <- Ecto.Changeset.apply_action(changeset, :insert),
                  {:ok, process} <- Repo.insert(
@@ -36,33 +69,38 @@ defmodule Workflow.Engine do
                         process_params |> Map.put(:context, context)
                     )
                  ),
-                 {:ok, task}    <- create_task(%{process_id: process.id, flow_node_name: "start"}, opts)
+                 {:ok, task} <- create_task(%{process_id: process.id, flow_node_name: "start"}, opts)
             do
                 {process, task}
+            else
+                {:error, error} -> Repo.rollback(error)
             end
         end
     end
 
-    def process_user_action(task, context_params, opts \\ []) do
+    def process_user_action(task, params, opts \\ []) do
         process = Process.get(task.process_id)
+        flow = Process.get_flow(process)
         node = Task.get_flow_node(task)
 
         Repo.transaction fn ->
-            changeset = context_changeset(process.context, context_params, node.fields, node.validations)
+            changeset = get_changeset(process.context, params, flow, node)
 
-            with {:ok, context} <- Ecto.Changeset.apply_action(changeset, :update),
-                 {:ok, process} <- Process.update_changeset(process, %{context: context}) |> Repo.update(),
-                 {:ok, task}    <- Task.update_changeset(task, %{status: "done"}) |> Repo.update()
+            with {:ok, context}     <- Ecto.Changeset.apply_action(changeset, :update),
+                 {:ok, _process}    <- Process.update_changeset(process, %{context: context}) |> Repo.update(),
+                 {:ok, task}        <- Task.update_changeset(task, %{status: "done"}) |> Repo.update()
             do
                 if Keyword.get(opts, :schedule, true) do
                     with {:ok, _} <- schedule_task(task) do
                         task
+                    else
+                        {:error, error} -> Repo.rollback(error)
                     end
                 else
                     task
                 end
             else
-                {:error, error} -> error
+                {:error, error} -> Repo.rollback(error)
             end
         end
     end
@@ -148,6 +186,7 @@ defmodule Workflow.Engine do
                 {:ok, task}     = failed_task(task, "unknown flow node #{flow_node_name} for #{process.flow_type}")
                 {:ok, process}  = failed_process(process, "unknown flow node #{flow_node_name} for #{process.flow_type}")
                 {task, [], process}
+
             flow_node ->
                 unless task.status in ["finished", "failed"] do
                     case flow_node do

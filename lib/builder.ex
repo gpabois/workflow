@@ -4,9 +4,10 @@ defmodule Workflow.Builder do
     defp start(flow, fields, next, opts \\ []) do
         flow
         |> Map.put("start", %Start{
-            fields: fields, 
+            fields: fields,
             validations: Keyword.get(opts, :validations, []),
-            view: Keyword.get(opts, :view, nil), 
+            view: Keyword.get(opts, :view, nil),
+            controller: Keyword.get(opts, :controller, nil),
             next: next
         })
     end
@@ -24,10 +25,11 @@ defmodule Workflow.Builder do
     def user_action(flow, id, fields, assign_user, next, opts \\ []) do
         flow
         |> Map.put(id, %UserAction {
-                fields: fields, 
+                fields: fields,
                 validations: Keyword.get(opts, :validations, []),
                 view: Keyword.get(opts, :view, nil),
-                assign_user: assign_user, 
+                controller: Keyword.get(opts, :controller, nil),
+                assign_user: assign_user,
                 next: next
             }
         )
@@ -48,12 +50,15 @@ defmodule Workflow.Builder do
         |> Map.put(id, %Subprocess{init: init, result: result, next: next})
     end
 
-    def build(nodes, name) do
+    def build(nodes, name, opts \\ []) do
         nodes = nodes |> nend()
 
         %Workflow.Flow{
             name: name,
-            nodes: nodes
+            nodes: nodes,
+            controller: Keyword.get(opts, :controller, nil),
+            view: Keyword.get(opts, :view, nil),
+            struct: Keyword.get(opts, :struct, [])
         }
     end
 end

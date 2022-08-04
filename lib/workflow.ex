@@ -33,8 +33,13 @@ defmodule Workflow do
   def process_user_action(task, context_params, opts \\ []) do
     Workflow.Engine.process_user_action(task, context_params, opts)
   end
-  
-  def context_changeset(context, params, fields, validations) do
-    Workflow.Engine.context_changeset(context, params, fields, validations)
+
+  def context_changeset(context, params, flow, node) do
+    Workflow.Engine.get_changeset(context, params, flow, node)
   end
+
+  def context(flow) do
+    Workflow.Flow.data(flow)
+  end
+
 end

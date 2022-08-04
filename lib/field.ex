@@ -1,5 +1,16 @@
 defmodule Workflow.Field do
-    defstruct id: nil, type: nil, input_type: nil, label: nil, values: nil, values_fn: nil, required: false, default: nil, internal: false, validations: []
+    defstruct [
+        id: nil,
+        type: nil,
+        input_type: nil,
+        label: nil,
+        values: nil,
+        values_fn: nil,
+        required: false,
+        default: nil,
+        internal: false,
+        validations: []
+    ]
 
     def id(field) do
         field.id
@@ -74,6 +85,7 @@ defmodule Workflow.Field do
 
     def file(id, opts \\ []) do
         %__MODULE__{
+            type:       :map,
             input_type: :file,
             id:         id,
             internal:   Keyword.get(opts, :internal, false),

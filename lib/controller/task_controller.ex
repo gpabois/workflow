@@ -1,67 +1,57 @@
 defmodule Workflow.TaskController do
 
-    defmacro __using__(opts \\ []) do
-        redirect_fn = Keyword.fetch!(opts, :redirect)
+    defmacro __using__(_opts \\ []) do
         quote do
             alias Workflow.{Process, Task, Flow}
 
-             def prepare_user_action(conn, %{"task_id" => task_id} = _args) do
+             def prepare(conn, %{"task_id" => task_id} = args) do
                 task = Task.get(task_id)
                 process = Process.get(task.process_id)
+                flow = Process.get_flow(process)
                 node = Task.get_flow_node(task)
 
                 def_ctx_extractor = fn ctx -> [] end
-                
-                {view, action, ctx_extractor} = case node.view do
-                    {view, action, ctx_extractor} -> {view, action, ctx_extractor}
-                    {view, action} -> {view, action, def_ctx_extractor}
-                    view -> {view, "user_action.html", def_ctx_extractor}
-                end
-                
-                assigns = [
-                    changeset: Workflow.context_changeset(%{}, %{}, node.fields, node.validations),
-                    context: process.context,
-                    task: task,
-                    fields: node.fields
-                ] ++ ctx_extractor.(process.context)
 
-                conn
-                |> put_view(view)
-                |> render(
-                    action, 
-                    assigns
-                )
+                cond do
+                    node.controller != nil ->
+                        {controller, actions} = case node.controller do
+                            {controller, actions} -> {controller, actions}
+                            controller -> {controller, []}
+                        end
+                        apply(controller, Keyword.get(actions, :prepare, :prepare), [
+                            conn,
+                            args
+                            |> Map.put("node", node)
+                            |> Map.put("task", task)
+                            |> Map.put("flow", flow)
+                            |> Map.put("process", process)
+                        ])
+                    true -> raise "You have to set either view or controller for the UserAction"
+                end
             end
 
-            def process_user_action(conn, %{"task_id" => task_id, "user_action" => user_action_params} = _args) do
+            def execute(conn, %{"task_id" => task_id, "user_action" => user_action_params} = args) do
                 task = Task.get(task_id)
                 process = Process.get(task.process_id)
                 node = Task.get_flow_node(task)
-                
+
                 def_ctx_extractor = fn ctx -> [] end
-                
-                {view, action, ctx_extractor} = case node.view do
-                    {view, action, ctx_extractor} -> {view, action, ctx_extractor}
-                    {view, action} -> {view, action, def_ctx_extractor}
-                    view -> {view, "user_action.html", def_ctx_extractor}
-                end
 
-                assigns = [
-                    changeset: Workflow.context_changeset(%{}, %{}, node.fields, node.validations),
-                    context: process.context,
-                    task: task,
-                    fields: node.fields
-                ] ++ ctx_extractor.(process.context)
+                cond do
+                    node.controller != nil ->
+                        {controller, actions} = case node.controller do
+                            {controller, actions} -> {controller, actions}
+                            controller -> {controller, []}
+                        end
 
-                case Workflow.process_user_action(task, user_action_params) do
-                    {:ok, task} -> 
-                        conn
-                        |> redirect(to: unquote(redirect_fn).(conn, task, process))
-
-                    {:error, changeset} ->
-                        conn
-                        |> put_view(view)
-                        |> render(action, assigns)                
+                        apply(controller, Keyword.get(actions, :execute, :execute), [
+                            conn,
+                            args
+                            |> Map.put("task", task)
+                            |> Map.put("process", process)
+                            |> Map.put("node", node)
+                        ])
+                    true -> raise "You have to set either controller for the UserAction"
                 end
             end
         end
